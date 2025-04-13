@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>تشغيل الكاميرا ورفع فيديو إلى Google Drive</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      direction: rtl;
+      text-align: center;
+      padding: 20px;
+    }
+    video {
+      width: 90%;
+      max-width: 400px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin-top: 10px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h2>🎥 تشغيل الكاميرا ورفع الفيديو إلى Google Drive</h2>
+  <video id="preview" autoplay muted playsinline></video><br>
+  <button id="start">ابدأ التسجيل</button>
+
+  <script>
+    const CLIENT_ID = '31931961077-df4rgd4i3dogfu7ehkalgqf2mjkih499.apps.googleusercontent.com';
+    const FOLDER_ID = '15JSLZ8Yku9ZzckuaFyhVoKshHsL6qMq_';
+    let accessToken = '';
+    let mediaRecorder;
+    let recordedChunks = [];
+
+    const video = document.getElementById('preview');
+    const startButton = document.getElementById('start');
+
+    // تشغيل الكاميرا الأمامية
+    async function startCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: true });
+      video.srcObject = stream;
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
+      mediaRecorder.onstop = uploadVideo;
+    }
+
+    // الدخول إلى Google OAuth
+    function loginToGoogle() {
+      const redirectUri = window.location.origin + window.location.pathname;
+      const scope = 'https://www.googleapis.com/auth/drive.file';
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=token&client_id=${CLIENT_ID}&redirect_uri=${redirectUri}&scope=${scope}`;
+      window.location.href = authUrl;
+    }
+
+    // التقاط Access Token
+    window.onload = () => {
+      if (window.location.hash.includes('access_token')) {
+        accessToken = new URLSearchParams(window.location.hash.substring(1)).get('access_token');
+        startCamera();
+      } else {
+        loginToGoogle();
+      }
+    };
+
+    // بدء التسجيل
+    startButton.onclick = () => {
+      recordedChunks = [];
+      mediaRecorder.start();
+      startButton.textContent = '...جاري التسجيل';
+      startButton.disabled = true;
+
+      setTimeout(() => {
+        mediaRecorder.stop();
+        startButton.textContent = 'تم التسجيل ✅';
+      }, 5000); // تسجيل 5 ثواني
+    };
+
+    // رفع الفيديو إلى Google Drive
+    async function uploadVideo() {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+
+      const metadata = {
+        name: `video_${Date.now()}.webm`,
+        mimeType: 'video/webm',
+        parents: [FOLDER_ID]
+      };
+
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file', blob);
+
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST',
+        headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+        body: form
+      });
+
+      if (res.ok) {
+        alert('✅ تم رفع الفيديو إلى Google Drive بنجاح');
+      } else {
+        alert('❌ فشل في رفع الفيديو');
+      }
+    }
+  </script>
+</body>
+</html>
